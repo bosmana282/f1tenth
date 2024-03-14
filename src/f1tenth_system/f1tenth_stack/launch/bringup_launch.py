@@ -32,7 +32,7 @@ import os
 
 def generate_launch_description():
     channel_type =  LaunchConfiguration('channel_type', default='serial')
-    serial_port = LaunchConfiguration('serial_port', default='/dev/ttyUSB0')
+    serial_port = LaunchConfiguration('serial_port', default='/dev/sensors/rplidar')
     serial_baudrate = LaunchConfiguration('serial_baudrate', default='256000') 
     frame_id = LaunchConfiguration('frame_id', default='laser')
     inverted = LaunchConfiguration('inverted', default='false')
@@ -48,10 +48,17 @@ def generate_launch_description():
         'config',
         'vesc.yaml'
     )
-    sensors_config = os.path.join(
+    lidar_config = os.path.join(
         get_package_share_directory('f1tenth_stack'),
         'config',
-        'sensors.yaml'
+        'sensors',
+        'lidar.yaml'
+    )
+    camera_config = os.path.join(
+        get_package_share_directory('f1tenth_stack'),
+        'config',
+        'sensors',
+        'camera.yaml'
     )
     mux_config = os.path.join(
         get_package_share_directory('f1tenth_stack'),
@@ -67,16 +74,20 @@ def generate_launch_description():
         'vesc_config',
         default_value=vesc_config,
         description='Descriptions for vesc configs')
-    sensors_la = DeclareLaunchArgument(
-        'sensors_config',
-        default_value=sensors_config,
-        description='Descriptions for sensor configs')
+    lidar_la = DeclareLaunchArgument(
+        'lidar_config',
+        default_value=lidar_config,
+        description='Descriptions for lidar configs')
+    camera_la = DeclareLaunchArgument(
+        'camera_config',
+        default_value=camera_config,
+        description='Descriptions for camera configs')
     mux_la = DeclareLaunchArgument(
         'mux_config',
         default_value=mux_config,
         description='Descriptions for ackermann mux configs')
 
-    ld = LaunchDescription([joy_la, vesc_la, sensors_la, mux_la])
+    ld = LaunchDescription([joy_la, vesc_la, lidar_la, camera_la, mux_la])
 
     joy_node = Node(
         package='joy',
@@ -126,12 +137,12 @@ def generate_launch_description():
                          'angle_compensate': angle_compensate}],
         output='screen'
     )
-    #urg_node = Node(
-    #    package='urg_node',
-    #    executable='urg_node_driver',
-    #    name='urg_node',
-    #    parameters=[LaunchConfiguration('sensors_config')]
-    #)
+    camera_node = Node(
+        package='realsense2_camera',
+        executable='realsense2_camera_node',
+        name='camera_node',
+        parameters=[LaunchConfiguration('camera_config')]
+    )
     ackermann_mux_node = Node(
         package='ackermann_mux',
         executable='ackermann_mux',
@@ -154,6 +165,7 @@ def generate_launch_description():
     ld.add_action(vesc_driver_node)
     # ld.add_action(throttle_interpolator_node)
     ld.add_action(lidar_node)
+    ld.add_action(camera_node)
     ld.add_action(ackermann_mux_node)
     ld.add_action(static_tf_node)
     return ld
