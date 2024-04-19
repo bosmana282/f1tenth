@@ -3,12 +3,10 @@ import rclpy
 from rclpy.node import Node
 
 import numpy as np
-# TODO: include needed ROS msg type headers and libraries
 from sensor_msgs.msg import LaserScan
 from std_msgs.msg import Bool
 from nav_msgs.msg import Odometry
 from ackermann_msgs.msg import AckermannDriveStamped, AckermannDrive
-
 
 class SafetyNode(Node):
     """
@@ -62,12 +60,12 @@ class SafetyNode(Node):
 
     def scan_callback(self, scan_msg):
         # Calculate TTC
-       # emergency_breaking = False
+        # emergency_breaking = False
         brake_range=0
         brake_angle=0
         for idx, r in enumerate(scan_msg.ranges):
             if (np.isnan(r)or r > scan_msg.range_max or r < scan_msg.range_min): continue
-            threshold = 0.8 # To be tuned in real vehicle
+            threshold = 0.08 # To be tuned in real vehicle
             if r / max(self.speed * np.cos(idx * scan_msg.angle_increment), 0.001) < threshold:
                 brake_range = r 
                 brake_angle = 180 * idx * scan_msg.angle_increment / np.pi
