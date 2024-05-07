@@ -2,33 +2,36 @@ import rclpy
 from rclpy.node import Node
 
 import numpy as np
-import math
 from nav_msgs.msg import Odometry
 from ackermann_msgs.msg import AckermannDriveStamped
 from tf_transformations import euler_from_quaternion
+from sensor_msgs.msg import LaserScan
+from .motion_control_interface import MotionControlInterface
+from .obstacle_avoidance_interface import ObstacleAvoidanceInterface
+from .avoidance_bug2 import Bug2OA
+from .motion_feedback import FeedbackControlOA
+from .motion_ppursuit import PurePursuitOA
 
-class FeedbackController(Node):
-    """
-    The class that handles motion control by feedback control.
-    """
-    def __init__(self):
-        super().__init__('feedback_control')
+class ObstacleAvoidance(Node):
+    def __init__(self, motion_controller: MotionControlInterface, obstacle_avoider: ObstacleAvoidanceInterface):
         """
-        Publishing to the /drive topic with a AckermannDriveStamped drive message.
-        Subscription to /ego_racecar/odom topic to get the current linear and angularspeed of the vehicle.
-        
-        x component of the linear velocity in odom is the speed
-        z component of the angular velocity in odom is the turning speed
+        Handles the navigation of the robot from beginning to start,
+        while using reactive methods to avoid obstacles.
         """
-        
-        self.k_alpha = 2
-        self.k_beta = -1
-        self.k_rho = 0.15 # possibly add minimal value for speed since too close to target --> too slow --> stall
+        super().__init__('obstacle_avoidance')
+        self.motion_controller = motion_controller
+        self.obstacle_avoidance = obstacle_avoider
+
+        # Initialize obstackle avoidance parameters
+        self.emergency_flag = False
+
+        # Initialize waypoint navigation and parameters
+        self.waypoints = [(0, 0), (10, 10), (20, 10), (30, 10)]
+        self.current_waypoint_index = 0
         self.wheelbase = 0.3
         self.stop_distance = 0.5 # distance from which vehicle will slow down in front of final goal
         self.create_timer(0.1, self.timer_callback)
 
-        # Initialization
         self.v = 0
         self.speed = 0.0
         self.steering_angle = 0.0
@@ -38,22 +41,29 @@ class FeedbackController(Node):
         self.arrival_flag = False
 
         # Create ROS subscribers and publishers
+        self.scan_subscription = self.create_subscription( 
+            LaserScan,
+            'scan',
+            self.scan_callback,
+            10
+        )
+
         self.odom_subscription = self.create_subscription(
             Odometry,
-            '/odom', # this is more reliable than /pf/pose/odom
+            '/odom', 
             self.odom_callback,
             10
         )
  
         self.ackcmd_subscription = self.create_subscription(
             AckermannDriveStamped,
-            '/ackermann_cmd', # this is more reliable than /pf/pose/odom
+            '/ackermann_cmd', 
             self.ack_callback,
             10
         )
 
-        # Update the speed and steering angle of the car
         self.publisher_ = self.create_publisher(AckermannDriveStamped, 'ackermann_cmd2', 1000)
+
 
     def odom_callback(self, odom_msg):
         # Update current speed, steering angle and pose
@@ -64,38 +74,41 @@ class FeedbackController(Node):
         pos_y = odom_msg.pose.pose.position.y
         orientation = odom_msg.pose.pose.orientation
         quaternion = [orientation.x, orientation.y, orientation.z, orientation.w]
-        theta = euler_from_quaternion(quaternion)[2] #+np.pi/2
+        theta = euler_from_quaternion(quaternion)[2] 
         self.pose = pos_x,pos_y,theta
 
+    def scan_callback(self, scan_msg):
+        # Continuously scan for obstacles
+        for idx, r in enumerate(scan_msg.ranges):
+            if r < 0.5:
+                self.emergency_flag = True
+                obstacle_range = r
+                obstacle_angle = 180 * idx * scan_msg.angle_increment / np.pi
+                self.get_logger().info("obstacle detected at {} [m, degrees]".format([obstacle_range,obstacle_angle]))
+            else:
+                self.emergency_flag = False
+
     def timer_callback(self):
-        # Example waypoints
-        # waypoints = [(5, 10), (20, 10), (30, 10)] # TO BE ADAPTED to a function that generates standard waypoints based on input values start and ending point
-        waypoints = [(3, 0), (3, 4)]
-        # waypoints = [(6, 0)]
         # Find the target point
-        target_point = self.find_target_point(waypoints)
+        target_point = self.find_target_point(self.waypoints)
 
         self.distance_WP = np.linalg.norm(np.array(target_point) - np.array([self.pose[0], self.pose[1]]))
         self.get_logger().info("WP check: {}".format(self.distance_WP))    
 
-        if target_point == waypoints[-1]:
+        if target_point == self.waypoints[-1]:
             self.get_logger().info("Heading towards the last WP: {}".format(target_point))
             # if np.linalg.norm(np.array(waypoints[-1]) - np.array([self.pose[0], self.pose[1]])) < self.stop_distance:
-            #      self.arrival_flag = True
+            #     self.arrival_flag = True
         elif self.distance_WP < 0.1:
             self.WP_flag = True
-        if np.linalg.norm(np.array(waypoints[-1]) - np.array([self.pose[0], self.pose[1]])) < 0.08:
+        if np.linalg.norm(np.array(self.waypoints[-1]) - np.array([self.pose[0], self.pose[1]])) < 0.05:
             self.arrival_flag = True
             self.get_logger().info("Arrived at goal")
             self.get_logger().info("Arrived at goal: {}".format(target_point)) # evt add stop node
 
 
-        # Calculate the steering angle
-        self.v, self.omega = self.calculate_steering(target_point)
-        
-        # Print results
-        self.get_logger().info("Target Point: {}".format(target_point))
-        self.get_logger().info("Current position: {}".format(self.pose))
+        # Calculate steering angle with selected motion controller
+        self.v, self.omega = self.motion_controller.calculate_steering(target_point, self.pose)
 
     def find_target_point(self, waypoints): # If necessary, change PP "find_target_point" to this one
         """
@@ -107,27 +120,8 @@ class FeedbackController(Node):
 
         return waypoints[self.WP_index]
 
-    def calculate_steering(self, target_point):
-        """
-        Calculates the angular and linear velocity required to follow the target point.
-        """
-        x, y, theta = self.pose
-        tx, ty = target_point
-        rho =  math.sqrt(pow(ty-y,2) + pow(tx-x,2)) # distance from robot to target
-        alpha = - theta + math.atan2(ty-y, tx-x)
-        beta = - theta - alpha       
-        v = self.k_rho*rho
-        omega1 = self.k_alpha*alpha + self.k_beta*beta
-        
-        if omega1 > 0:
-             omega = min(omega1, 0.36) # 0.36 rad = max turning radius
-        else:
-             omega = max(omega1, -0.36) # 0.36 rad = max turning radius
-        self.get_logger().info("Actual [rho, alpha, beta]: {}".format([rho, alpha, beta]))
-        self.get_logger().info("Actual [v, omega1, omega]: {}".format([v, omega1, omega]))
-        return v, omega        
-
     def ack_callback(self, ack_msg):
+        # Publish control commands
         new_message = AckermannDriveStamped()
         new_message.drive = ack_msg.drive
         if self.arrival_flag == True: # make car stop at exact right spot
@@ -139,21 +133,34 @@ class FeedbackController(Node):
             new_message.drive.steering_angle = self.omega
             self.publisher_.publish(new_message)
 
-    # def ack_callback(self, ack_msg):
-    #     new_message = AckermannDriveStamped()
-    #     new_message.drive = ack_msg.drive
-        
-    #     new_message.drive.speed = 1.0
-    #     new_message.drive.steering_angle = 0.36
-    #     self.publisher_.publish(new_message)
-
+    # Other functions for waypoint navigation
 
 def main(args=None):
     rclpy.init(args=args)
-    feedback_control = FeedbackController()
-    rclpy.spin(feedback_control)
 
-    #pure_pursuit.destroy_node()
+    # Allow the user to select the motion control method
+    motion_control_method = input("Select motion control method (pure_pursuit or feedback_control): ")
+
+    if motion_control_method == "pure_pursuit":
+        motion_controller = PurePursuitOA()
+    elif motion_control_method == "feedback_control":
+        motion_controller = FeedbackControlOA()
+    else:
+        print("Invalid motion control method. Please select either 'pure_pursuit' or 'feedback_control'.")
+        return
+    
+    obstacle_avoidance_method = input("Select obstacle avoidance method (bug2 or VFH): ")
+
+    if obstacle_avoidance_method == "bug2":
+        obstacle_avoider = Bug2OA()
+    # elif obstacle_avoidance_method == "VFH":
+    #     obstacle_avoider = VFHOA()
+    else:
+        print("Invalid obstacle avoidance method. Please select either 'bug2' or 'VFH'.")
+        return
+
+    obstacle_avoidance = ObstacleAvoidance(motion_controller, obstacle_avoider)
+    rclpy.spin(obstacle_avoidance)
     rclpy.shutdown()
 
 if __name__ == "__main__":

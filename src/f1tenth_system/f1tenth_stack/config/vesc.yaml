@@ -2,12 +2,12 @@
   # general parameters shared by all vesc-related nodes
   ros__parameters:
     # erpm (electrical rpm) = speed_to_erpm_gain * speed (meters / second) + speed_to_erpm_offset
-    speed_to_erpm_gain: 4614.0
+    speed_to_erpm_gain: 2750.0 # 4614.0
     speed_to_erpm_offset: -300.0 #-300.0 Change when /odom/pose/pose/position/x value is drifting even when car is stationary
 
     # servo value (0 to 1) =  steering_angle_to_servo_gain * steering angle (radians) + steering_angle_to_servo_offset
-    steering_angle_to_servo_gain: -1.2135  # -1.2135 adjust with steps of 0.1 until car makes 180° turn in 1.784m
-    steering_angle_to_servo_offset: 0.5304 # adjust with steps of 0.1 until car drives straight
+    steering_angle_to_servo_gain: -1.1135  # -1.2135 adjust with steps of 0.1 until car makes 180° turn in 1.784m
+    steering_angle_to_servo_offset: 0.5144 # 0.5134 adjust with steps of 0.1 until car drives straight
 
     port: /dev/sensors/vesc
     duty_cycle_min: 0.0
@@ -20,11 +20,11 @@
     speed_max: 23250.0
     position_min: 0.0
     position_max: 0.0
-    servo_min: 0.15 #0.15 Change when turns to left or right are sharper than in other direction
-    servo_max: 0.95 #0.85
+    servo_min: 0.15 #0.15 over min --> right Change when turns to left or right are sharper than in  direction
+    servo_max: 0.95 #0.85 over max --> left
 
 # No longer needed, all parameters are shared
-# ackermann_to_vesc_node:
+# ackermann_to_vesc_node:other
 #   ros__parameters:
 
 vesc_to_odom_node:

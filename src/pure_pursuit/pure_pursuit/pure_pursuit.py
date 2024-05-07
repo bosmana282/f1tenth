@@ -58,7 +58,7 @@ class PurePursuitController(Node):
 
         orientation = odom_msg.pose.pose.orientation
         quaternion = [orientation.x, orientation.y, orientation.z, orientation.w]
-        theta = euler_from_quaternion(quaternion)[2] #+np.pi/2
+        theta = euler_from_quaternion(quaternion)[2] 
         self.pose = pos_x,pos_y,theta
 
     def timer_callback(self):
