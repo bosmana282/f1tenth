@@ -81,7 +81,6 @@ class WaypointNavigation(Node):
             self.WP_flag = True
         if np.linalg.norm(np.array(self.waypoints[-1]) - np.array([self.pose[0], self.pose[1]])) < 0.05:
             self.arrival_flag = True
-            self.get_logger().info("Arrived at goal")
             self.get_logger().info("Arrived at goal: {}".format(target_point)) # evt add stop node
 
 
@@ -109,7 +108,7 @@ class WaypointNavigation(Node):
             self.publisher_.publish(new_message)
         else:
             new_message.drive.speed = max(self.v, 1.0) # tune based on chosen terrain/track; also add min(self.v, 2.5)?
-            new_message.drive.steering_angle = self.omega
+            new_message.drive.steering_angle = self.omega #steering_angle_velocity
             self.publisher_.publish(new_message)
 
     # Other functions for waypoint navigation

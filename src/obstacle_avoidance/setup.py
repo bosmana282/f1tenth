@@ -21,6 +21,7 @@ setup(
     entry_points={
         'console_scripts': [
                 'waypoint_navigation = obstacle_avoidance.waypoint_navigation:main',
+                'obstacle_avoidance = obstacle_avoidance.obstacle_avoidance:main',
         ],
     },
 )
