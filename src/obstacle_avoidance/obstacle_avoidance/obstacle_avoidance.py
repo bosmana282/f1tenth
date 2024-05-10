@@ -8,10 +8,11 @@ from ackermann_msgs.msg import AckermannDriveStamped
 from tf_transformations import euler_from_quaternion
 from sensor_msgs.msg import LaserScan
 from .motion_control_interface import MotionControlInterface
-from .obstacle_avoidance_interface import ObstacleAvoidanceInterface
 from .motion_feedback import FeedbackControlOA
 from .motion_ppursuit import PurePursuitOA
+from .obstacle_avoidance_interface import ObstacleAvoidanceInterface
 from .avoidance_bug2 import Bug2OA
+from .avoidance_tangent import TangentBugOA
 
 class ObstacleAvoidance(Node):
     def __init__(self, motion_controller: MotionControlInterface, obstacle_avoider: ObstacleAvoidanceInterface):
@@ -27,6 +28,7 @@ class ObstacleAvoidance(Node):
         self.scan_angles = []
         self.scan_ranges = []
         self.obstacle_hit_threshold = 0.6 # also in avoidance_bug2!
+        self.obstacle_hit = False
 
         # self.waypoints = [(0, 0), (2, 2), (0, 4), (-2, 2), (0, 0)]
         self.waypoints = [(0, 0), (10, 0)]
@@ -94,7 +96,8 @@ class ObstacleAvoidance(Node):
         else:
             self.obstacle_hit = False
             relative_polar_hit_point = (None,None)
-        self.scan_angles = [scan_msg.angle_min + i*scan_msg.angle_increment for i in range(len(scan_ranges))]
+        self.scan_angles = [180*i*scan_msg.angle_increment/np.pi for i in range(len(scan_ranges))]
+        
         self.scan_ranges = scan_ranges
         self.relative_polar_hit_point = relative_polar_hit_point
 
@@ -103,20 +106,20 @@ class ObstacleAvoidance(Node):
         target_point = self.find_target_point(self.waypoints)
 
         self.distance_WP = np.linalg.norm(np.array(target_point) - np.array([self.pose[0], self.pose[1]]))
-        self.get_logger().info("WP check: {}".format(self.distance_WP))
-        self.get_logger().info("Target Point: {}".format(target_point)) 
-        self.get_logger().info("Current position: {}".format(self.pose))    
+        # self.get_logger().info("WP check: {}".format(self.distance_WP))
+        # self.get_logger().info("Target Point: {}".format(target_point)) 
+        # self.get_logger().info("Current position: {}".format(self.pose))    
 
         if self.WP_index == len(self.waypoints)-1:
-            self.get_logger().info("Heading towards the last WP: {}".format(target_point))
+            #self.get_logger().info("Heading towards the last WP: {}".format(target_point))
             if np.linalg.norm(np.array(self.waypoints[-1]) - np.array([self.pose[0], self.pose[1]])) < self.stop_distance:
                 self.arrival_flag = True
         elif self.distance_WP < 0.1:
             self.WP_flag = True
         if np.linalg.norm(np.array(self.waypoints[-1]) - np.array([self.pose[0], self.pose[1]])) < 0.05:
             self.arrival_flag = True
-            self.get_logger().info("Arrived at goal")
-            self.get_logger().info("Arrived at goal: {}".format(target_point)) # evt add stop node
+            #self.get_logger().info("Arrived at goal")
+            #self.get_logger().info("Arrived at goal: {}".format(target_point)) # evt add stop node
 
         # Find point where car hits the obstacle (if there is one...)
         min_range,min_angle = self.relative_polar_hit_point
@@ -124,9 +127,11 @@ class ObstacleAvoidance(Node):
         self.get_logger().info("Min range: {}".format(min_range))
 
         # Calculate steering angle with selected motion controller
-        self.v, self.omega = self.obstacle_avoider.calculate_reaction(target_point, self.pose, self.relative_polar_hit_point, self.scan_angles, self.scan_ranges, self.arrival_flag)
-                   
-        
+        self.v, self.omega = self.obstacle_avoider.calculate_reaction(target_point, self.pose, self.relative_polar_hit_point, self.scan_angles, self.scan_ranges, self.arrival_flag, self.obstacle_hit) 
+        self.get_logger().info("v, omega: {}".format([self.v, self.omega]))         
+        # v, o, right_side_ranges = self.obstacle_avoider.follow_obstacle_boundary_right(self.scan_angles, self.scan_ranges)
+        # self.get_logger().info("Sum ranges: {}".format(right_side_ranges))
+
     def find_target_point(self, waypoints): # If necessary, change PP "find_target_point" to this one
         """
         Makes the car follow the list of WPs. Once close enough to the current one, the target point will change to the next WP.
@@ -166,14 +171,16 @@ def main(args=None):
         print("Invalid motion control method. Please select either '1' or '2'.")
         return
 
-    obstacle_avoidance_method = input("Select obstacle avoidance method: Bug2 (1) or VFH (2): ")
+    obstacle_avoidance_method = input("Select obstacle avoidance method: Bug2 (1), Tangent Bug (2), or VFH (3): ")
 
     if obstacle_avoidance_method == "1":
         obstacle_avoider = Bug2OA(motion_controller)
-    # elif obstacle_avoidance_method == "2":
+    elif obstacle_avoidance_method == "2":
+         obstacle_avoider = TangentBugOA(motion_controller)
+    # elif obstacle_avoidance_method == "3":
     #     obstacle_avoider = VFHOA()
     else:
-        print("Invalid obstacle avoidance method. Please select either '1' or '2'.")
+        print("Invalid obstacle avoidance method. Please select either '1', '2' or '3'.")
         return
 
     obstacle_avoidance = ObstacleAvoidance(motion_controller, obstacle_avoider)

@@ -8,7 +8,7 @@ from .motion_feedback import FeedbackControlOA
 from .motion_ppursuit import PurePursuitOA
 from .obstacle_avoidance_interface import ObstacleAvoidanceInterface
 
-class Bug2OA(ObstacleAvoidanceInterface):
+class TangentBugOA(ObstacleAvoidanceInterface):
     def __init__(self, motion_controller: MotionControlInterface):
         #super().__init__(self)
         self.motion_controller = motion_controller
