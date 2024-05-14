@@ -7,7 +7,7 @@ class PurePursuitOA(MotionControlInterface):
     def __init__(self):
         self.lookahead_distance = 0.3
         self.wheelbase = 0.3
-        self.speed = 1.5 
+        self.speed = 0.8 
 
     def calculate_steering(self, target_point, current_pose):
         # Implement pure pursuit steering calculation

@@ -27,11 +27,11 @@ class ObstacleAvoidance(Node):
         self.relative_polar_hit_point = (0.0,0.0)
         self.scan_angles = []
         self.scan_ranges = []
-        self.obstacle_hit_threshold = 0.6 # also in avoidance_bug2!
+        self.obstacle_hit_threshold = 1.2 # also in avoidance_bug2!
         self.obstacle_hit = False
 
         # self.waypoints = [(0, 0), (2, 2), (0, 4), (-2, 2), (0, 0)]
-        self.waypoints = [(0, 0), (10, 0)]
+        self.waypoints = [(0, 0), (5, 0)]
         self.current_waypoint_index = 0
         self.wheelbase = 0.3
         self.stop_distance = 0.5 # distance from which vehicle will slow down in front of final goal
@@ -103,12 +103,13 @@ class ObstacleAvoidance(Node):
 
     def timer_callback(self):
         # Find the target point
-        target_point = self.find_target_point(self.waypoints)
+        target_point, gen_direct = self.find_target_point(self.waypoints)
 
         self.distance_WP = np.linalg.norm(np.array(target_point) - np.array([self.pose[0], self.pose[1]]))
         # self.get_logger().info("WP check: {}".format(self.distance_WP))
-        # self.get_logger().info("Target Point: {}".format(target_point)) 
-        # self.get_logger().info("Current position: {}".format(self.pose))    
+        self.get_logger().info("Target Point: {}".format(target_point)) 
+        self.get_logger().info("Current position: {}".format(self.pose)) 
+        self.get_logger().info("General direction: {}".format(gen_direct))   
 
         if self.WP_index == len(self.waypoints)-1:
             #self.get_logger().info("Heading towards the last WP: {}".format(target_point))
@@ -127,8 +128,11 @@ class ObstacleAvoidance(Node):
         self.get_logger().info("Min range: {}".format(min_range))
 
         # Calculate steering angle with selected motion controller
-        self.v, self.omega = self.obstacle_avoider.calculate_reaction(target_point, self.pose, self.relative_polar_hit_point, self.scan_angles, self.scan_ranges, self.arrival_flag, self.obstacle_hit) 
-        self.get_logger().info("v, omega: {}".format([self.v, self.omega]))         
+        self.v, self.omega, leave_flag, average, goal = self.obstacle_avoider.calculate_reaction(target_point, self.pose, self.relative_polar_hit_point, self.scan_angles, self.scan_ranges, self.arrival_flag, self.obstacle_hit, gen_direct) 
+        self.get_logger().info("v, omega: {}".format([self.v, self.omega])) 
+        self.get_logger().info("Leave: {}".format(leave_flag))
+        self.get_logger().info("Average wall dist: {}".format(average))
+        self.get_logger().info("Goal direction: {}".format(goal))       
         # v, o, right_side_ranges = self.obstacle_avoider.follow_obstacle_boundary_right(self.scan_angles, self.scan_ranges)
         # self.get_logger().info("Sum ranges: {}".format(right_side_ranges))
 
@@ -139,9 +143,17 @@ class ObstacleAvoidance(Node):
         if self.WP_flag == True:
             self.WP_index = self.WP_index + 1
             self.WP_flag = False
+        general_direction = self.calculate_general_direction(waypoints)
+        return waypoints[self.WP_index], general_direction
 
-        return waypoints[self.WP_index]
-    
+    def calculate_general_direction(self, waypoints):
+        general_direction = 0.0
+        if self.WP_index > 0:
+            x1, y1 = waypoints[self.WP_index-1]
+            x2, y2 = waypoints[self.WP_index]
+            general_direction = np.degrees(math.atan2(y2-y1,x2-x1))
+        return general_direction
+
     def ack_callback(self, ack_msg):
         # Publish control commands
         new_message = AckermannDriveStamped()
@@ -151,7 +163,7 @@ class ObstacleAvoidance(Node):
             new_message.drive.steering_angle = 0.0
             self.publisher_.publish(new_message)
         else:
-            new_message.drive.speed = max(self.v, 1.0) # tune based on chosen terrain/track; also add min(self.v, 2.5)?
+            new_message.drive.speed = max(self.v, 0.8) # tune based on chosen terrain/track; also add min(self.v, 2.5)?
             new_message.drive.steering_angle = self.omega #steering_angle_velocity
             self.publisher_.publish(new_message)
 

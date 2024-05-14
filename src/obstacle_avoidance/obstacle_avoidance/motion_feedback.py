@@ -9,7 +9,7 @@ class FeedbackControlOA(MotionControlInterface):
         # Initialize parameters for feedback control
         self.k_alpha = 2
         self.k_beta = -1
-        self.k_rho = 0.15
+        self.k_rho = 0.10
 
     def calculate_steering(self, target_point, current_pose):
         # Implement feedback control steering calculation
@@ -23,6 +23,9 @@ class FeedbackControlOA(MotionControlInterface):
         beta = - theta - alpha       
         v = self.k_rho*rho
         omega1 = self.k_alpha*alpha + self.k_beta*beta
+
+        # v = 0.8 # just for testing OA
+        # omega1 = 0.0 # just for testing OA
         
         if omega1 > 0:
              omega = min(omega1, 0.36) # 0.36 rad = max turning radius
