@@ -132,11 +132,9 @@ class ObstacleAvoidance(Node):
         self.get_logger().info("v, omega: {}".format([self.v, self.omega])) 
         self.get_logger().info("Leave: {}".format(leave_flag))
         self.get_logger().info("Average wall dist: {}".format(average))
-        self.get_logger().info("Goal direction: {}".format(goal))       
-        # v, o, right_side_ranges = self.obstacle_avoider.follow_obstacle_boundary_right(self.scan_angles, self.scan_ranges)
-        # self.get_logger().info("Sum ranges: {}".format(right_side_ranges))
+        self.get_logger().info("Goal direction: {}".format(goal))
 
-    def find_target_point(self, waypoints): # If necessary, change PP "find_target_point" to this one
+    def find_target_point(self, waypoints): 
         """
         Makes the car follow the list of WPs. Once close enough to the current one, the target point will change to the next WP.
         """
