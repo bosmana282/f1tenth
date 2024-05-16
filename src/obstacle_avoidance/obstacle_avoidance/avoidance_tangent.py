@@ -19,81 +19,62 @@ class TangentBugOA(ObstacleAvoidanceInterface):
         self.angles = None
         self.complete_turn = False
         self.leave_flag = False
+        self.hit_flag = False
+        self.steering_point = 0.0,0.0
 
         self.v = 0.0
         self.omega = 0.0
 
-    def calculate_reaction(self, target_point, current_pose, relative_polar_hit_point, scan_angles, scan_ranges, arrival_flag, obstacle_hit, gen_direction):
+    def calculate_reaction(self, target_point, current_pose, relative_polar_hit_point, scan_angles, scan_ranges, arrival_flag, obstacle_hit2, gen_direction):
         goal_direction = None
+        leave_cond = None
+        goal_range = None
         obst_angles = None
         average = None
+        difference = None
         v = self.v
         omega = self.omega
         min_range,min_angle = relative_polar_hit_point
         hit_point = None
         hit_point_rel = None
+        motion_control = "None"
+        #steering_point = None
 
-        self.obstacle_hit = obstacle_hit # Use for reset
         self.arrival_flag = arrival_flag
         self.relative_polar_hit_point = relative_polar_hit_point
 
-        if obstacle_hit and not self.obstacle_hit:
-            self.leave_flag = False
-
-        if not self.arrival_flag:
-            if self.leave_flag:
-                # Go back to business as usual once leave point is reached
-                v, omega = self.motion_controller.calculate_steering(target_point, current_pose)
-            elif not min_range == None and min_range < self.tangent_hit_threshold:
-                obst_angles, obst_ranges = self.find_hit_point(scan_ranges, scan_angles, relative_polar_hit_point)
-                hit_point, hit_point_rel = self.select_hit_point(obst_angles, obst_ranges, current_pose, target_point)
-                v, omega = self.motion_controller.calculate_steering(hit_point, current_pose)
-                if min_range < self.obstacle_hit_threshold and 0.0 <= min_angle < 180:
-                    v, omega, average = self.follow_obstacle_boundary_right(scan_angles, scan_ranges, min_angle)
-                    if not self.leave_flag:
-                            self.leave_flag, goal_direction = self.find_leave_point(target_point, current_pose, scan_ranges, scan_angles)
-                    else:
-                        if min_range > self.obstacle_hit_threshold:
-                            self.leave_flag = False
-                            self.complete_turn = False
-                elif min_range < self.obstacle_hit_threshold and 180 <= min_angle < 360:
-                    v, omega, average = self.follow_obstacle_boundary_left(scan_angles, scan_ranges, min_angle)
-                    if not self.leave_flag:
-                        self.leave_flag, goal_direction = self.find_leave_point(target_point, current_pose, scan_ranges, scan_angles)
-                    else:
-                        if min_range > self.obstacle_hit_threshold:
-                            self.leave_flag = False
-                            self.complete_turn = False
+        if not min_range == None and min_range < self.tangent_hit_threshold and (0.0 <= min_angle < 120 or 240 <= min_angle < 360):
+            obst_angles, obst_ranges = self.find_hit_point(scan_ranges, scan_angles, relative_polar_hit_point)
+            hit_point, hit_point_rel = self.select_hit_point(obst_angles, obst_ranges, current_pose, target_point)
+            v, omega = self.motion_controller.calculate_steering(self.steering_point, current_pose)
+            motion_control = "Toward hit point"
+            if np.linalg.norm(np.array([current_pose[0], current_pose[1]]) - np.array([self.steering_point[0],self.steering_point[1]])) < 0.1 and 0.0 <= min_angle < 90:
+                v, omega, average = self.follow_obstacle_boundary_left(scan_angles, scan_ranges, min_angle)
+                motion_control = "Follow boundary left"
+                if not self.leave_flag:
+                        self.leave_flag, goal_direction, goal_range, difference, leave_cond = self.find_leave_point(target_point, current_pose, scan_ranges, scan_angles)
                 else:
-                    v, omega = self.motion_controller.calculate_steering(target_point, current_pose)
-            elif not self.obstacle_hit:
-                # Default motion control
-                v, omega = self.motion_controller.calculate_steering(target_point, current_pose)
-        return v, omega, self.leave_flag, average, obst_angles, hit_point, hit_point_rel
+                    if min_range > self.obstacle_hit_threshold:
+                        self.leave_flag = False
+                        self.complete_turn = False
+            elif np.linalg.norm(np.array([current_pose[0], current_pose[1]]) - np.array([self.steering_point[0],self.steering_point[1]])) < 0.1 and 270 <= min_angle < 360:
+                v, omega, average = self.follow_obstacle_boundary_right(scan_angles, scan_ranges, min_angle)
+                motion_control = "Follow boundary right"
+                if not self.leave_flag:
+                    self.leave_flag, goal_direction, goal_range, difference, leave_cond = self.find_leave_point(target_point, current_pose, scan_ranges, scan_angles)
+                else:
+                    if min_range > self.obstacle_hit_threshold:
+                        self.leave_flag = False
+                        self.complete_turn = False
+        else:
+            v, omega = self.motion_controller.calculate_steering(target_point, current_pose)
+            motion_control = "Default: nothing detected yet"
 
-    def find_hit_point2(self, scan_ranges, scan_angles, rel_pol_hit):
-        min_range, min_angle = rel_pol_hit
-        obst_angles = None
-        obst_ranges = None
-        if min_range < self.tangent_hit_threshold and len(scan_ranges) > 0:
-            index = np.argmin(scan_ranges)
-            obst_angles = [scan_angles[index]] # [min_angle]
-            obst_ranges = [scan_ranges[index]] # [min_angle]
-            # obst_angles = [scan_angles[i] for i in range(len(scan_angles)) if abs(scan_ranges[i] - scan_ranges[i-1]) < 0.01]
-
-            i = index
-            while i + 1 < len(scan_ranges) and abs(scan_ranges[i] - scan_ranges[i+1]) < 0.01:
-                i += 1 
-                obst_angles.append(scan_angles[i])
-                obst_ranges.append(scan_ranges[i])
-
-            i = index 
-            while i - 1 > -len(scan_ranges) and abs(scan_ranges[i] - scan_ranges[i-1]) < 0.01:
-                i -= 1 
-                obst_angles.insert(0,scan_angles[i])
-                obst_ranges.append(scan_ranges[i])
-
-        return obst_angles, obst_ranges
+        if self.leave_flag:
+            v, omega = self.motion_controller.calculate_steering(target_point, current_pose)
+            motion_control = "Default: leave"    
+            
+        return v, omega, self.leave_flag, average, obst_angles, hit_point, hit_point_rel, motion_control, self.steering_point, goal_direction, goal_range, difference, leave_cond
 
     def find_hit_point(self, scan_ranges, scan_angles, rel_pol_hit):
         min_range, min_angle = rel_pol_hit
@@ -101,10 +82,8 @@ class TangentBugOA(ObstacleAvoidanceInterface):
         obst_ranges = None
     
         if min_range < self.tangent_hit_threshold and len(scan_ranges) > 0:
-            # Find the index of the minimum range value
             min_index = np.argmin(scan_ranges)
-        
-            # Initialize lists to store angles and ranges for the obstacle edge
+
             obst_angles = []
             obst_ranges = []
         
@@ -114,13 +93,17 @@ class TangentBugOA(ObstacleAvoidanceInterface):
                 obst_angles.insert(0, scan_angles[i])
                 obst_ranges.insert(0, scan_ranges[i])
                 i = (i - 1) % len(scan_ranges)
-        
+                if i == min_index:
+                    break
+
             # Move forward to find the end of the obstacle segment
             i = (min_index + 1) % len(scan_ranges)
             while scan_ranges[i] < self.tangent_hit_threshold:
                 obst_angles.append(scan_angles[i])
                 obst_ranges.append(scan_ranges[i])
                 i = (i + 1) % len(scan_ranges)
+                if i == min_index:
+                    break
     
         return obst_angles, obst_ranges
 
@@ -130,26 +113,39 @@ class TangentBugOA(ObstacleAvoidanceInterface):
         x_p, y_p, theta = pose
         hit_point = 0.0,0.0
         hit_point_rel = 0.0,0.0
+        hit_point_margin = 0.0,0.0
+        #steering_point = 0.0,0.0
         
-        if not obst_angles == None:
-            hit_left_polar = obst_angles[0], obst_ranges[0]
-            hit_right_polar = obst_angles[-1], obst_ranges[-1]
+        if not obst_angles == None and not self.hit_flag:
+            hit_left_polar = obst_angles[-1], obst_ranges[-1] # Most left value --> last value
+            hit_right_polar = obst_angles[0], obst_ranges[0] # Most right value --> first value
 
-            x_o_l = x_p + hit_left_polar[1]*math.cos(hit_left_polar[0]+theta)
-            y_o_l = y_p + hit_left_polar[1]*math.sin(hit_left_polar[0]+theta)
-            x_o_r = x_p + hit_right_polar[1]*math.cos(hit_right_polar[0]+theta)
-            y_o_r = y_p + hit_right_polar[1]*math.sin(hit_right_polar[0]+theta)
+            hit_left_polar_margin = obst_angles[-1]+5, obst_ranges[-1]
+            hit_right_polar_margin = obst_angles[0]-5, obst_ranges[0]
 
-            dist_left = math.dist([x_o_l, y_o_l],[tx, ty])
-            dist_right = math.dist([x_o_r, y_o_r],[tx, ty])
+            x_o_l = x_p + hit_left_polar[1]*math.cos(np.radians(hit_left_polar[0])+theta)
+            y_o_l = y_p + hit_left_polar[1]*math.sin(np.radians(hit_left_polar[0])+theta)
+            x_o_r = x_p + hit_right_polar[1]*math.cos(np.radians(hit_right_polar[0])+theta)
+            y_o_r = y_p + hit_right_polar[1]*math.sin(np.radians(hit_right_polar[0])+theta)
 
-            min_dist = min(dist_left, dist_right)
-            if min_dist == dist_left:
+            # dist_left = math.dist([x_o_l, y_o_l],[tx, ty])
+            # dist_right = math.dist([x_o_r, y_o_r],[tx, ty])
+
+            # min_dist = min(dist_left, dist_right)
+            min_dist = min(obst_ranges[0], obst_ranges[-1])
+            if min_dist == obst_ranges[-1]:
                 hit_point = x_o_l, y_o_l
                 hit_point_rel = hit_left_polar
-            elif min_dist == dist_right:
+                hit_point_margin = hit_left_polar_margin
+            elif min_dist == obst_ranges[0]:
                 hit_point = x_o_r, y_o_r
                 hit_point_rel = hit_right_polar
+                hit_point_margin = hit_right_polar_margin
+
+            steering_point_x = x_p + hit_point_margin[1]*math.cos(np.radians(hit_point_margin[0])+theta)
+            steering_point_y = y_p + hit_point_margin[1]*math.sin(np.radians(hit_point_margin[0])+theta)
+            self.steering_point = steering_point_x, steering_point_y
+            self.hit_flag = True
 
         return hit_point, hit_point_rel
 
@@ -160,7 +156,7 @@ class TangentBugOA(ObstacleAvoidanceInterface):
         v = 0.7
         omega = 0.0        
         min_angle = 75
-        max_angle = 115
+        max_angle = 105
 
         left_side_ranges = [scan_ranges[i] for i in range(len(scan_ranges)) if min_angle < scan_angles[i] < max_angle]
         left_side_ranges = [x for x in left_side_ranges if np.isfinite(x)]
@@ -192,7 +188,7 @@ class TangentBugOA(ObstacleAvoidanceInterface):
         right_side_ranges = [scan_ranges[i] for i in range(len(scan_ranges)) if min_angle < scan_angles[i] < max_angle]
         right_side_ranges = [x for x in right_side_ranges if np.isfinite(x)]
 
-        obstacle_dir = 2-abs(math.sin(np.radians(hit_angle)))
+        obstacle_dir = 2 - abs(math.sin(np.radians(hit_angle)))
 
         if len(right_side_ranges) > 0:
             average_right = np.sum(right_side_ranges) / len(right_side_ranges)
@@ -249,18 +245,39 @@ class TangentBugOA(ObstacleAvoidanceInterface):
         """
         # Leave obstacle once goal dircetion is free
         leave_flag = self.leave_flag
+        goal_range = 0.0
+        difference = 174
         x, y, theta = current_pose  
         tx, ty = target_point
-        alpha = math.atan2(ty-y, tx-x)
+        alpha = - theta + math.atan2(ty-y, tx-x) % 2*np.pi
+        leave_condition = "nothing"
+        goal_range_L = 0.0
+        goal_range_R = 0.0
 
         scan_angles = np.array(scan_angles)
         # Compute the absolute differences between alpha and each angle in scan_angles
-        diff = [np.abs(scan_angles[i] - alpha) for i in range(len(scan_angles))]
+        diff = [np.abs(scan_angles[i] - np.degrees(alpha)) for i in range(len(scan_angles))]
         # Find the index of the minimum difference
         if len(diff) > 0:
             index = np.argmin(diff)
-        
-            if scan_ranges[index] > self.obstacle_hit_threshold: # margin of 5 deg
-                self.obstacle_hit = False
-                leave_flag = True
-        return leave_flag, np.degrees(alpha)
+            difference = min(diff)
+            goal_range = scan_ranges[index]
+            goal_range_L = scan_ranges[index+7]
+            goal_range_R = scan_ranges[index-7]
+            leave_condition = "1"
+
+            if 0 <=  alpha < 180:
+                leave_condition = "2"
+                if goal_range > self.obstacle_hit_threshold and goal_range_L > self.obstacle_hit_threshold: 
+                    self.obstacle_hit = False
+                    leave_flag = True
+                    leave_condition = "3"
+
+            if 180 <=  alpha < 360:
+                leave_condition = "4"
+                if goal_range > self.obstacle_hit_threshold and goal_range_R > self.obstacle_hit_threshold: 
+                    self.obstacle_hit = False
+                    leave_flag = True
+                    leave_condition = "5"
+
+        return leave_flag, np.degrees(alpha), goal_range, difference, leave_condition

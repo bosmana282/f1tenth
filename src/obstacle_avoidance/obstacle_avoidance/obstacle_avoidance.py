@@ -34,7 +34,7 @@ class ObstacleAvoidance(Node):
         self.waypoints = [(0, 0), (5, 0)]
         self.current_waypoint_index = 0
         self.wheelbase = 0.3
-        self.stop_distance = 0.5 # distance from which vehicle will slow down in front of final goal
+        self.stop_distance = 0.3 # distance from which vehicle will slow down in front of final goal
         self.create_timer(0.1, self.timer_callback)
 
         self.v = 0.0
@@ -107,7 +107,7 @@ class ObstacleAvoidance(Node):
 
         self.distance_WP = np.linalg.norm(np.array(target_point) - np.array([self.pose[0], self.pose[1]]))
         # self.get_logger().info("WP check: {}".format(self.distance_WP))
-        self.get_logger().info("Target Point: {}".format(target_point)) 
+        self.get_logger().info("1. Target Point: {}".format(target_point)) 
         self.get_logger().info("Current position: {}".format(self.pose)) 
         self.get_logger().info("General direction: {}".format(gen_direct))   
 
@@ -128,13 +128,19 @@ class ObstacleAvoidance(Node):
         self.get_logger().info("Min range: {}".format(min_range))
 
         # Calculate steering angle with selected motion controller
-        self.v, self.omega, leave_flag, average, obst_angles, hit_point, hit_point_rel = self.obstacle_avoider.calculate_reaction(target_point, self.pose, self.relative_polar_hit_point, self.scan_angles, self.scan_ranges, self.arrival_flag, self.obstacle_hit, gen_direct) 
+        self.v, self.omega, leave_flag, average, obst_angles, hit_point, hit_point_rel, motion_control, steering_point, goal_dir, goal_range, difference, leave_cond = self.obstacle_avoider.calculate_reaction(target_point, self.pose, self.relative_polar_hit_point, self.scan_angles, self.scan_ranges, self.arrival_flag, self.obstacle_hit, gen_direct) 
         self.get_logger().info("v, omega: {}".format([self.v, self.omega])) 
         self.get_logger().info("Leave: {}".format(leave_flag))
         self.get_logger().info("Average wall dist: {}".format(average))
         self.get_logger().info("Obstacle angles: {}".format(obst_angles))
         self.get_logger().info("Hit point: {}".format(hit_point))
         self.get_logger().info("Hit point rel: {}".format(hit_point_rel))
+        self.get_logger().info("Motion control: {}".format(motion_control))
+        self.get_logger().info("Steering point: {}".format(steering_point))
+        self.get_logger().info("Goal direction: {}".format(goal_dir))
+        self.get_logger().info("Goal range: {}".format(goal_range))
+        self.get_logger().info("Difference: {}".format(difference))
+        self.get_logger().info("X. Leave cond: {}".format(leave_cond))
 
     def find_target_point(self, waypoints): 
         """
