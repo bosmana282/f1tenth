@@ -20,7 +20,8 @@ class TangentBugOA(ObstacleAvoidanceInterface):
         self.complete_turn = False
         self.leave_flag = False
         self.hit_flag = False
-        self.steering_point = 0.0,0.0
+        self.steering_point = 10.0, 0.0
+        self.steering_index = 0
 
         self.v = 0.0
         self.omega = 0.0
@@ -40,7 +41,6 @@ class TangentBugOA(ObstacleAvoidanceInterface):
         motion_control = "None"
         #steering_point = None
 
-        self.arrival_flag = arrival_flag
         self.relative_polar_hit_point = relative_polar_hit_point
 
         if not min_range == None and min_range < self.tangent_hit_threshold and (0.0 <= min_angle < 120 or 240 <= min_angle < 360):
@@ -48,33 +48,37 @@ class TangentBugOA(ObstacleAvoidanceInterface):
             hit_point, hit_point_rel = self.select_hit_point(obst_angles, obst_ranges, current_pose, target_point)
             v, omega = self.motion_controller.calculate_steering(self.steering_point, current_pose)
             motion_control = "Toward hit point"
-            if np.linalg.norm(np.array([current_pose[0], current_pose[1]]) - np.array([self.steering_point[0],self.steering_point[1]])) < 0.1 and 0.0 <= min_angle < 90:
+            if np.linalg.norm(np.array([current_pose[0], current_pose[1]]) - np.array([self.steering_point[0],self.steering_point[1]])) < 0.15 and 0.0 <= min_angle < 100:
                 v, omega, average = self.follow_obstacle_boundary_left(scan_angles, scan_ranges, min_angle)
                 motion_control = "Follow boundary left"
                 if not self.leave_flag:
-                        self.leave_flag, goal_direction, goal_range, difference, leave_cond = self.find_leave_point(target_point, current_pose, scan_ranges, scan_angles)
-                else:
+                    self.leave_flag, goal_direction, goal_range, difference, leave_cond = self.find_leave_point(target_point, current_pose, scan_ranges, scan_angles)
                     if min_range > self.obstacle_hit_threshold:
                         self.leave_flag = False
                         self.complete_turn = False
-            elif np.linalg.norm(np.array([current_pose[0], current_pose[1]]) - np.array([self.steering_point[0],self.steering_point[1]])) < 0.1 and 270 <= min_angle < 360:
+            elif np.linalg.norm(np.array([current_pose[0], current_pose[1]]) - np.array([self.steering_point[0],self.steering_point[1]])) < 0.15 and 260 <= min_angle < 360:
                 v, omega, average = self.follow_obstacle_boundary_right(scan_angles, scan_ranges, min_angle)
                 motion_control = "Follow boundary right"
                 if not self.leave_flag:
                     self.leave_flag, goal_direction, goal_range, difference, leave_cond = self.find_leave_point(target_point, current_pose, scan_ranges, scan_angles)
-                else:
                     if min_range > self.obstacle_hit_threshold:
                         self.leave_flag = False
                         self.complete_turn = False
         else:
             v, omega = self.motion_controller.calculate_steering(target_point, current_pose)
             motion_control = "Default: nothing detected yet"
+            self.leave_flag = False
+            self.hit_flag = False
+            self.steering_index = 0
 
         if self.leave_flag:
             v, omega = self.motion_controller.calculate_steering(target_point, current_pose)
-            motion_control = "Default: leave"    
-            
-        return v, omega, self.leave_flag, average, obst_angles, hit_point, hit_point_rel, motion_control, self.steering_point, goal_direction, goal_range, difference, leave_cond
+            motion_control = "Default: leave"  
+            if min_range > self.obstacle_hit_threshold:
+                self.leave_flag = False
+                self.hit_flag = False
+
+        return v, omega, self.leave_flag, self.steering_index, obst_angles, hit_point, hit_point_rel, motion_control, self.steering_point, goal_direction, goal_range, difference, leave_cond
 
     def find_hit_point(self, scan_ranges, scan_angles, rel_pol_hit):
         min_range, min_angle = rel_pol_hit
@@ -144,8 +148,16 @@ class TangentBugOA(ObstacleAvoidanceInterface):
 
             steering_point_x = x_p + hit_point_margin[1]*math.cos(np.radians(hit_point_margin[0])+theta)
             steering_point_y = y_p + hit_point_margin[1]*math.sin(np.radians(hit_point_margin[0])+theta)
-            self.steering_point = steering_point_x, steering_point_y
-            self.hit_flag = True
+
+            # Inconsistency lidar data
+            if self.steering_index == 0:
+                self.steering_point = steering_point_x, steering_point_y 
+            elif np.linalg.norm(np.array([steering_point_x, steering_point_y]) - np.array([pose[0],pose[1]])) > np.linalg.norm(np.array([self.steering_point[0], self.steering_point[1]]) - np.array([pose[0],pose[1]])):
+                self.steering_point = steering_point_x, steering_point_y
+            if self.steering_index < 4:
+                self.steering_index = self.steering_index + 1
+            else:
+                self.hit_flag = True
 
         return hit_point, hit_point_rel
 
