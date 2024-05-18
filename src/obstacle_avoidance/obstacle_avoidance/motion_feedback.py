@@ -24,8 +24,8 @@ class FeedbackControlOA(MotionControlInterface):
         v = self.k_rho*rho
         omega1 = self.k_alpha*alpha + self.k_beta*beta
 
-        # v = 0.8 # just for testing OA
-        # omega1 = 0.0 # just for testing OA
+        v = 0.7 # just for testing OA
+        omega1 = -0.36 # just for testing OA
         
         if omega1 > 0:
              omega = min(omega1, 0.36) # 0.36 rad = max turning radius

@@ -19,10 +19,10 @@ class WaypointNavigation(Node):
 
         # Initialize waypoint navigation parameters
         # self.waypoints = [(0, 0), (2, 2), (0, 4), (-2, 2), (0, 0)]
-        self.waypoints = [(0, 0), (2, 2), (0, 5)]
+        self.waypoints = [(0, 0), (4, 0)]
         self.current_waypoint_index = 0
         self.wheelbase = 0.3
-        self.stop_distance = 0.5 # distance from which vehicle will slow down in front of final goal
+        self.stop_distance = 0.05 # distance from which vehicle will slow down in front of final goal
         self.create_timer(0.1, self.timer_callback)
 
         self.v = 0
@@ -86,7 +86,7 @@ class WaypointNavigation(Node):
 
         # Calculate steering angle with selected motion controller
         self.v, self.omega = self.motion_controller.calculate_steering(target_point, self.pose)
-
+        self.get_logger().info("v, delta: {}".format([self.v, self.omega])) 
     def find_target_point(self, waypoints): # If necessary, change PP "find_target_point" to this one
         """
         Makes the car follow the list of WPs. Once close enough to the current one, the target point will change to the next WP.

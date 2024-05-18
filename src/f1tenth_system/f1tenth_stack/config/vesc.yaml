@@ -6,8 +6,8 @@
     speed_to_erpm_offset: -300.0 #-300.0 Change when /odom/pose/pose/position/x value is drifting even when car is stationary
 
     # servo value (0 to 1) =  steering_angle_to_servo_gain * steering angle (radians) + steering_angle_to_servo_offset
-    steering_angle_to_servo_gain: -1.1135  # -1.2135 adjust with steps of 0.1 until car makes 180° turn in 1.784m
-    steering_angle_to_servo_offset: 0.5144 # 0.5134 adjust with steps of 0.1 until car drives straight
+    steering_angle_to_servo_gain: -0.9515  # -1.2135 adjust with steps of 0.1 until car makes 180° turn in 1.784m
+    steering_angle_to_servo_offset: 0.5105 # 0.5134 adjust with steps of 0.1 until car drives straight
 
     port: /dev/sensors/vesc
     duty_cycle_min: 0.0
