@@ -1,0 +1,10 @@
+cff-version: 1.0.0
+message: "If you use this software, please cite it as below."
+authors:
+  - family-names: Casado Faulí
+    given-names: Ana María
+  - family-names: Ramón Soria
+    given-names: Pablo
+title: "Cartographer SLAM with Lidar OS0"
+version: 1.0.0
+date-released: 2022-06-22
